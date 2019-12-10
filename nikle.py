@@ -14,53 +14,71 @@ cellspace=20
 cellradius=6
 connwidth=4
 
-connangle=math.degrees(math.asin(connwidth/2/cellradius))
+connangle=2*math.degrees(math.asin(connwidth/2/cellradius))
 connmap={}
 
-def cell_position(cellno):
-    column=int(cellno/rowcount)
-    row=cellno%rowcount
+def coord_position(column, row):
     x=cellspace*(column+(row%2)/2)
     y=row*cellspace*math.sqrt(3)/2
     return (x, y)
 
-def neighbours(cellno, group):
+def cell_position(cellno):
+    column=int(cellno/rowcount)
+    row=cellno%rowcount
+    return coord_position(column, row)
+
+def neighbours(cellno):
     array=[]
     row=cellno%rowcount
     if row%2==0:
         if row<(rowcount-1):
-            array.append(cellno+1)
+            array.append(cellno-rowcount+1)
         if row>0:
-            array.append(cellno-1)
+            array.append(cellno-rowcount-1)
     else:
         if row<(rowcount-1):
-            array.append(cellno+1+rowcount)
+            array.append(cellno+rowcount+1)
         if row>0:
-            array.append(cellno-1+rowcount)
+            array.append(cellno+rowcount-1)
+    if row>0:
+        array.append(cellno-1)
+    if row<(rowcount-1):
+        array.append(cellno+1)
     array.append(cellno+rowcount)
-    return list(filter(lambda cellno: cellno in group, array))
+    array.append(cellno-rowcount)
+    return list(filter(lambda c: c>=0, array))
 
 drawing = dxf.drawing('test.dxf')
 
 def connect_cells(first, second):
+    if not first in connmap:
+        connmap[first]={}
+    if not second in connmap:
+        connmap[second]={}
+
+    connmap[first][second]=None
+    connmap[second][first]=None
+
     fx,fy=cell_position(first)
     sx,sy=cell_position(second)
     vecx=sx-fx
     vecy=sy-fy
+    if vecx<0:
+        return
     magn=math.sqrt(vecx*vecx+vecy*vecy)
     vecx/=magn
     vecy/=magn
     if sy>fy:
-        angle=300
-    elif sy<fy:
         angle=60
+    elif sy<fy:
+        angle=300
     else:
         angle=0
     radangle=math.radians(angle)
-    offx=math.sin(radangle)*connwidth/2
+    offx=math.sin(-radangle)*connwidth/2
     offy=math.cos(radangle)*connwidth/2
 
-    cut=math.cos(math.radians(connangle))
+    cut=math.cos(math.radians(connangle/2))
     cut=cut*cellradius
 
     fx+=vecx*cut
@@ -76,40 +94,46 @@ def connect_cells(first, second):
     end=sx-offx,sy-offy
     drawing.add(dxf.line(start, end))
 
-    if not first in connmap:
-        connmap[first]=[]
-    if not second in connmap:
-        connmap[second]=[]
 
-    connmap[first].append(angle)
-    connmap[second].append((angle + 180) % 360)
+print("connangle: ", connangle)
+def make_blind(cellno,target):
+    if target in connmap[cellno]:
+        return
+    fx,fy=cell_position(cellno)
+    sx,sy=cell_position(target)
+    horz=sx-fx
+    vert=sy-fy
+    magn=math.sqrt(horz*horz+vert*vert)
+    eps=0.0001
+    if horz>eps and vert>eps:
+        angle=60
+    elif horz<-eps and vert>eps:
+        angle=120
+    elif horz<-eps and vert<-eps:
+        angle=240
+    elif horz>eps and vert<-eps:
+        angle=300
+    elif horz<-eps and vert<eps and vert>-eps:
+        print("180 ", cellno, target)
+        angle=180
+    else:
+        angle=0
 
-def make_blind(cellno,angle):
-    start=angle+connangle+300+connangle
-    end=start+connangle*2
+    start=angle-connangle/2
+    end=start+connangle
     center=cell_position(cellno)
-    drawing.add(dxf.arc(cellradius, center, -end, -start))
-    print("need blind: ", angle)
+    drawing.add(dxf.arc(cellradius, center, start, end))
 
 def draw_group(group):
     for cellno in group:
-        for i in range(0, 6):
-            start=i*60+connangle
-            end=start+60-connangle*2
-            center=cell_position(cellno)
-            drawing.add(dxf.arc(cellradius, center, start, end))
-        for neigh in neighbours(cellno, group):
-            print("{} -> {}".format(cellno, neigh))
-            connect_cells(cellno, neigh)
-
-    for cellno in group:
-        print("cell: ", cellno)
-        for angle in range(0, 360, 60):
-            if not angle in connmap[cellno]:
-                make_blind(cellno, angle)
+        neigh=neighbours(cellno)
+        for target in neigh:
+            if target in group:
+                connect_cells(cellno, target)
+        for target in neigh:
+            make_blind(cellno, target)
 
 for group in groups:
-    print("group: {}".format(group))
     draw_group(group)
 
 drawing.save()
