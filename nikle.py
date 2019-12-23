@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 from dxfwrite import DXFEngine as dxf
+import subprocess
 import math
 
 rowcount=5
