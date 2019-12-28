@@ -40,12 +40,6 @@ def central_point(pointlist):
         y += point[1]
     return (x / len(pointlist), y / len(pointlist))
 
-class ReferencePoint:
-    def __init__(self, vertex, angle, targetlist):
-        self.vertex = vertex
-        self.targetset = set(targetlist)
-        self.angle = angle
-
 class Generator:
     def __init__(self, filename, scalex, scaley, offx):
         self.connection_width = 5
@@ -69,8 +63,8 @@ class Generator:
     def add_arc(self, radius, center, start, end):
         self.drawing.add(dxf.arc(radius, center, start, end))
 
-    def add_reference_point(self, node, targetlist, vertex):
-        reference = ReferencePoint(vertex, 0, targetlist)
+    def add_reference_point(self, node, vertex):
+        reference = vertex
         if not node in self.reference_points:
             self.reference_points[node] = []
         self.reference_points[node].append(reference)
@@ -218,8 +212,8 @@ class HexagonalGenerator(Generator):
         firstdistmap = {}
         seconddistmap = {}
         for p in points:
-            firstdistmap[p] = vector_length(sub_vector(p.vertex, first))
-            seconddistmap[p] = vector_length(sub_vector(p.vertex, second))
+            firstdistmap[p] = vector_length(sub_vector(p, first))
+            seconddistmap[p] = vector_length(sub_vector(p, second))
         def distance_first(p):
             return firstdistmap[p]
         def distance_second(p):
@@ -234,9 +228,9 @@ class HexagonalGenerator(Generator):
         point = points[0]
         print("shortest: ", shortest)
         for point in points:
-            print(node, " -> ", point.vertex, " : ", vector_length(sub_vector(point.vertex, first)))
-        center = central_point((point.vertex, first))
-        vector = sub_vector(point.vertex, first)
+            print(node, " -> ", point, " : ", vector_length(sub_vector(point, first)))
+        center = central_point((point, first))
+        vector = sub_vector(point, first)
         vector = normalize_vector(vector)
         vector = scale_vector(vector, math.tan(math.radians(15)) * 1)
         start = add_vector(first, vector)
@@ -270,9 +264,9 @@ class HexagonalGenerator(Generator):
             triangles.append(Triangle(self, left, right, down, -1))
 
         for t in triangles:
-            self.add_reference_point(t.first, (t.second, t.third), t.realfirst)
-            self.add_reference_point(t.second, (t.first, t.third), t.realsecond)
-            self.add_reference_point(t.third, (t.first, t.second), t.realthird)
+            self.add_reference_point(t.first, t.realfirst)
+            self.add_reference_point(t.second, t.realsecond)
+            self.add_reference_point(t.third, t.realthird)
 
         for t in triangles:
             if self.all_valid((t.first, t.second, t.third)):
@@ -286,7 +280,7 @@ class HexagonalGenerator(Generator):
 
     def draw_blind(self, vertex, node):
         center = self.real_coord(node)
-        points = list(map(lambda r: r.vertex, self.reference_points[node]))
+        points = list(map(lambda r: r, self.reference_points[node]))
         distmap = {}
         for p in points:
             distmap[p] = vector_length(sub_vector(p, vertex))
@@ -326,7 +320,7 @@ class HexagonalGenerator(Generator):
     def make_blinds(self):
         for node in filter(lambda n: n in self.group, self.reference_points):
             for ref in self.reference_points[node]:
-                vertex = ref.vertex
+                vertex = ref
                 if not self.reference_used[vertex]:
                     self.draw_blind(vertex, node)
 
