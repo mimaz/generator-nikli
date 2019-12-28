@@ -52,7 +52,7 @@ class Generator:
         self.drawing = dxf.drawing(filename)
         self.reference_points = {}
         self.reference_used = {}
-        self.reference_parents = {}
+        self.reference_nodes = {}
 
     def save(self):
         self.drawing.save()
@@ -69,7 +69,7 @@ class Generator:
             self.reference_points[node] = []
         self.reference_points[node].append(reference)
         self.reference_used[vertex] = False
-        self.reference_parents[vertex] = node
+        self.reference_nodes[vertex] = node
 
     def real_coord(self, abstract):
         column, row = abstract
@@ -206,7 +206,7 @@ class HexagonalGenerator(Generator):
         central = central_point((first, second))
         shifted = add_vector(first, scale_vector(target, margins))
         self.add_line(shifted, central)
-        node = self.reference_parents[first]
+        node = self.reference_nodes[first]
         assert(node in self.group)
         points = self.reference_points[node]
         firstdistmap = {}
@@ -220,15 +220,10 @@ class HexagonalGenerator(Generator):
             return seconddistmap[p]
         points = sorted(points, key=distance_first)
         points = list(filter(lambda p: firstdistmap[p] != 0, points))
-        if len(points) < 1:
-            return
         shortest = firstdistmap[points[0]]
         points = list(filter(lambda p: abs(firstdistmap[p] - shortest) < 0.001, points))
-        points = sorted(points, key = distance_second)
+        points = list(sorted(points, key = distance_second, reverse = True))
         point = points[0]
-        print("shortest: ", shortest)
-        for point in points:
-            print(node, " -> ", point, " : ", vector_length(sub_vector(point, first)))
         center = central_point((point, first))
         vector = sub_vector(point, first)
         vector = normalize_vector(vector)
@@ -332,5 +327,4 @@ generator = HexagonalGenerator('nikle.dxf', 19.5, 6)
 generator.make_graph(groups[0])
 generator.make_holes()
 generator.make_blinds()
-#generator.print_graph()
 generator.save()
