@@ -310,9 +310,16 @@ class HexagonalGenerator(Generator):
         vector = normalize_vector(sub_vector(center, vertex))
         shift = math.tan(math.radians(30)) * 2
         central = add_vector(vertex, scale_vector(vector, shift))
-        vector = firstvector
-        start = math.degrees(vector_angle(vector)) + 90
-        print("start: ", start)
+        firstangle = vector_angle(firstvector)
+        secondangle = vector_angle(secondvector)
+        anglediff = secondangle - firstangle
+        start = math.degrees(firstangle) + 90
+        if anglediff > 0:
+            start += 120
+        if firstvector[1] < 0 and secondvector[0] > 0 and secondvector[1] > 0:
+            start += 120
+        if abs(secondvector[0]) < 0.001 and secondvector[1] > 0 and firstvector[0] > 0 and firstvector[1] < 0:
+            start += 120
         end = start + 60
         self.add_arc(1, central, start, end)
 
