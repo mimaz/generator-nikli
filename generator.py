@@ -2,7 +2,6 @@
 
 from dxfwrite import DXFEngine as dxf
 import math
-import subprocess
 
 PI = 3.14159
 
@@ -10,7 +9,8 @@ def vector_length(vec):
     return math.sqrt(vec[0] * vec[0] + vec[1] * vec[1])
 
 def vector_angle(vec):
-    tan = math.atan(abs(vec[1] / vec[0]))
+    tan = math.asin(abs(vec[1] / vector_length(vec)))
+    #tan = math.atan(abs(vec[1] / vec[0]))
     if vec[1] < 0:
         if vec[0] < 0:
             return PI + tan
@@ -57,6 +57,7 @@ class Generator:
         self.holes = {}
         self.drawing = dxf.drawing(filename)
         self.reference_points = {}
+        self.reference_used = {}
         self.reference_parents = {}
 
     def save(self):
@@ -65,9 +66,6 @@ class Generator:
     def add_line(self, start, end):
         self.drawing.add(dxf.line(start, end))
 
-    def add_blind_line(self, start, end):
-        self.add_line(start, end)
-
     def add_arc(self, radius, center, start, end):
         self.drawing.add(dxf.arc(radius, center, start, end))
 
@@ -75,26 +73,12 @@ class Generator:
         reference = ReferencePoint(vertex, 0, targetlist)
         if not node in self.reference_points:
             self.reference_points[node] = []
-        if node == (0, 0):
-            print("add 0 0: ", vertex, " :: ", targetlist)
         self.reference_points[node].append(reference)
+        self.reference_used[vertex] = False
         self.reference_parents[vertex] = node
-
-    def find_target_reference_points(self, node, target):
-        points = []
-        for reference in self.reference_points[node]:
-            if target in reference.targetset:
-                points.append(reference.vertex)
-        return points
-
-    def close_blind(self, node, target):
-        points = self.find_target_reference_points(node, target)
-        if len(points) == 2:
-            self.add_blind_line(points[0], points[1])
 
     def real_coord(self, abstract):
         column, row = abstract
-        print("real row ", int(row))
         coordx = column + row % 2 * self.odd_offset_x
         coordy = row
         return (coordx * self.scale_x, coordy * self.scale_y)
@@ -197,6 +181,9 @@ class HexagonalGenerator(Generator):
         self.add_arc(1, center, angle, angle + 120)
 
     def draw_round_triangle(self, first, second, third):
+        self.reference_used[first] = True
+        self.reference_used[second] = True
+        self.reference_used[third] = True
         self.draw_triangle_corner(first, second, third)
         self.draw_triangle_corner(third, first, second)
         self.draw_triangle_corner(second, third, first)
@@ -205,6 +192,8 @@ class HexagonalGenerator(Generator):
         self.add_line_with_margins(third, first, math.sqrt(3))
 
     def draw_round_corner(self, first, second, third, order):
+        self.reference_used[first] = True
+        self.reference_used[second] = True
         margins = 2 - math.sqrt(3)
         v1 = sub_vector(third, first)
         v2 = scale_vector(v1, 2)
@@ -241,7 +230,7 @@ class HexagonalGenerator(Generator):
             return
         shortest = firstdistmap[points[0]]
         points = list(filter(lambda p: abs(firstdistmap[p] - shortest) < 0.001, points))
-        points = sorted(points, key=distance_second)
+        points = sorted(points, key = distance_second)
         point = points[0]
         print("shortest: ", shortest)
         for point in points:
@@ -295,16 +284,44 @@ class HexagonalGenerator(Generator):
             elif t.third in self.group and t.second in self.group:
                 self.draw_round_line(t.realthird, t.realsecond, t.realfirst, -t.orientation)
 
-    def add_blind_line(self, start, end):
-        self.add_line_with_margins(start, end, 2 - math.sqrt(3))
+    def draw_blind(self, vertex, node):
+        center = self.real_coord(node)
+        points = list(map(lambda r: r.vertex, self.reference_points[node]))
+        distmap = {}
+        for p in points:
+            distmap[p] = vector_length(sub_vector(p, vertex))
+        def vertex_distance(v):
+            return distmap[v]
+        points = sorted(points, key = vertex_distance)
+        points = list(filter(lambda p: distmap[p] != 0, points))
+        shortest = distmap[points[0]]
+        points = list(filter(lambda p: abs(distmap[p] - shortest) < 0.001, points))
+        assert(len(points) == 2)
+        first, second = points
+        shift = 1 / math.sqrt(3)
+        firstmiddle = central_point((vertex, first))
+        firstvector = normalize_vector(sub_vector(first, vertex))
+        firstshift = add_vector(vertex, scale_vector(firstvector, shift))
+        secondmiddle = central_point((vertex, second))
+        secondvector = normalize_vector(sub_vector(second, vertex))
+        secondshift = add_vector(vertex, scale_vector(secondvector, shift))
+        self.add_line(firstshift, firstmiddle)
+        self.add_line(secondshift, secondmiddle)
+        vector = normalize_vector(sub_vector(center, vertex))
+        shift = math.tan(math.radians(30)) * 2
+        central = add_vector(vertex, scale_vector(vector, shift))
+        vector = firstvector
+        start = math.degrees(vector_angle(vector)) + 90
+        print("start: ", start)
+        end = start + 60
+        self.add_arc(1, central, start, end)
 
     def make_blinds(self):
-        for node in self.group:
-            for target in filter(lambda t: not t in self.group, self.all_vertex_edges(*node)):
-                generator.close_blind(node, target)
-                vector = (target[0] - node[0], target[1] - node[1])
-                magnitude = math.sqrt(vector[0] * vector[0] + vector[1] * vector[1])
-                vector = (vector[0] / magnitude, vector[1] / magnitude)
+        for node in filter(lambda n: n in self.group, self.reference_points):
+            for ref in self.reference_points[node]:
+                vertex = ref.vertex
+                if not self.reference_used[vertex]:
+                    self.draw_blind(vertex, node)
 
 groups=[
         {(0, 0), (1, 0), (0, 1), (1, 1), (0, 2), (1, 2), (1, 3)},
@@ -313,6 +330,6 @@ groups=[
 generator = HexagonalGenerator('nikle.dxf', 19.5, 6)
 generator.make_graph(groups[0])
 generator.make_holes()
-#generator.make_blinds()
+generator.make_blinds()
 #generator.print_graph()
 generator.save()
