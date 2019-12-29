@@ -9,16 +9,15 @@ def vector_length(vec):
     return math.sqrt(vec[0] * vec[0] + vec[1] * vec[1])
 
 def vector_angle(vec):
-    tan = math.asin(abs(vec[1] / vector_length(vec)))
-    #tan = math.atan(abs(vec[1] / vec[0]))
+    angle = math.asin(abs(vec[1] / vector_length(vec)))
     if vec[1] < 0:
         if vec[0] < 0:
-            return PI + tan
-        return 2 * PI - tan
+            return PI + angle
+        return 2 * PI - angle
     else:
         if vec[0] < 0:
-            return PI - tan
-        return tan
+            return PI - angle
+        return angle
 
 def normalize_vector(vec):
     return scale_vector(vec, 1 / vector_length(vec))
@@ -32,36 +31,82 @@ def add_vector(vec, add):
 def sub_vector(vec, sub):
     return (vec[0] - sub[0], vec[1] - sub[1])
 
-def central_point(pointlist):
-    x = 0
-    y = 0
-    for point in pointlist:
-        x += point[0]
-        y += point[1]
-    return (x / len(pointlist), y / len(pointlist))
+def central_point(veclist):
+    x = sum(map(lambda v: v[0], veclist))
+    y = sum(map(lambda v: v[1], veclist))
+    count = len(veclist)
+    return (x / count, y / count)
+
+class Node:
+    def __init__(self, column, row):
+        self.column = column
+        self.row = row
+        self.coord = (column, row)
+
+    def __hash__(self):
+        return hash(self.row * 1000 + self.column)
+
+    def __eq__(self, other):
+        return self.column == other.column and self.row == other.row
+
+    def __str__(self):
+        return "Node({}, {})".format(self.column, self.row)
+
+    def position_x(self, generator):
+        return (self.column + self.row % 2 * generator.odd_offset_x) * generator.scale_x
+
+    def position_y(self, generator):
+        return (self.row * generator.scale_y)
+
+    def position(self, generator):
+        return (self.position_x(generator), self.position_y(generator))
+
+class Line:
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+
+class Arc:
+    def __init__(self, center, radius, start, angle):
+        self.center = center
+        self.radius = radius
+        self.start = start
+        self.angle = angle
 
 class Generator:
-    def __init__(self, filename, scalex, scaley, offx):
+    def __init__(self, scalex, scaley, offx):
         self.connection_width = 5
         self.odd_offset_x = offx
         self.scale_x = scalex
         self.scale_y = scaley
-        self.graph = {}
         self.group = {}
-        self.holes = {}
-        self.drawing = dxf.drawing(filename)
         self.reference_points = {}
         self.reference_used = {}
         self.reference_nodes = {}
+        self.shapes = []
 
-    def save(self):
-        self.drawing.save()
+    def draw_dxf(self, name):
+        drawing = dxf.drawing(name)
+        for shape in self.shapes:
+            dxfshape = None
+
+            if isinstance(shape, Line):
+                dxfshape = dxf.line(shape.start, shape.end)
+
+            if isinstance(shape, Arc):
+                start = math.degrees(shape.start)
+                end = math.degrees(shape.start + shape.angle)
+                dxfshape = dxf.arc(shape.radius, shape.center, start, end)
+
+            if dxfshape != None:
+                drawing.add(dxfshape)
+        drawing.save()
 
     def add_line(self, start, end):
-        self.drawing.add(dxf.line(start, end))
+        self.shapes.append(Line(start, end))
 
-    def add_arc(self, radius, center, start, end):
-        self.drawing.add(dxf.arc(radius, center, start, end))
+    def add_arc(self, center, radius, start, angle):
+        self.shapes.append(Arc(center, radius, start, angle))
 
     def add_reference_point(self, node, vertex):
         reference = vertex
@@ -71,71 +116,50 @@ class Generator:
         self.reference_used[vertex] = False
         self.reference_nodes[vertex] = node
 
-    def real_coord(self, abstract):
-        column, row = abstract
-        coordx = column + row % 2 * self.odd_offset_x
-        coordy = row
-        return (coordx * self.scale_x, coordy * self.scale_y)
-
-    def make_graph(self, group):
-        graph = {}
-        left_column = 10000
-        right_column = -10000
-        bottom_row = 10000
-        top_row = -10000
-        for vertex in group:
-            left_column = min(left_column, vertex[0])
-            right_column = max(right_column, vertex[0])
-            bottom_row = min(bottom_row, vertex[1])
-            top_row = max(top_row, vertex[1])
-            if not vertex in graph:
-                graph[vertex] = {}
-            for c in self.all_vertex_edges(*vertex):
-                graph[vertex][c] = c in group
-        self.graph = graph
-        self.group = group
+    def load_group(self, group):
+        nodes = list(map(lambda c: Node(*c), group))
+        first = nodes[0]
+        left_column = first.column
+        right_column = first.column
+        bottom_row = first.row
+        top_row = first.row
+        for node in nodes[1:]:
+            left_column = min(left_column, node.column)
+            right_column = max(right_column, node.column)
+            bottom_row = min(bottom_row, node.row)
+            top_row = max(top_row, node.row)
+        self.group = set(nodes)
         self.left_column = left_column
         self.right_column = right_column
         self.bottom_row = bottom_row
         self.top_row = top_row
 
-    def all_valid(self, pointlist):
-        for point in pointlist:
-            if not point in self.group:
-                return False
-        return True
-
-    def print_graph(self):
-        for v in self.graph:
-            print("vertex: ", v)
-            for e in self.graph[v]:
-                print("    edge: ", e)
-
 class Triangle:
-    def __init__(self, gen, first, second, third, orientation):
+    def __init__(self, generator, first, second, third, orientation):
         def hole_vertex(point, central):
             vector = (central[0] - point[0], central[1] - point[1])
             vector = normalize_vector(vector)
-            vector = scale_vector(vector, gen.connection_width)
+            vector = scale_vector(vector, generator.connection_width)
             return (point[0] + vector[0], point[1] + vector[1])
 
-        realfirst = gen.real_coord(first)
-        realsecond = gen.real_coord(second)
-        realthird = gen.real_coord(third)
+        realfirst = first.position(generator)
+        realsecond = second.position(generator)
+        realthird = third.position(generator)
 
         central = central_point((realfirst, realsecond, realthird))
-        self.first = first
-        self.second = second
-        self.third = third
+
         self.orientation = orientation
+        self.nodefirst = first
+        self.nodesecond = second
+        self.nodethird = third
         self.realfirst = hole_vertex(realfirst, central)
         self.realsecond = hole_vertex(realsecond, central)
         self.realthird = hole_vertex(realthird, central)
 
 class HexagonalGenerator(Generator):
-    def __init__(self, filename, scale, width):
+    def __init__(self, scale, width):
         vscale = scale * math.sqrt(3) / 2
-        super(HexagonalGenerator, self).__init__(filename, scale, vscale, 0.5)
+        super(HexagonalGenerator, self).__init__(scale, vscale, 0.5)
 
     def all_vertex_edges(self, column, row):
         edges = []
@@ -166,13 +190,12 @@ class HexagonalGenerator(Generator):
         vector = scale_vector(vector, 2)
         center = add_vector(vertex, vector)
         angle = math.asin(vector[1] / vector_length(vector))
-        angle = math.degrees(angle)
-        angle = angle + 120
+        angle = angle + PI * 2 / 3
         if vector[0] < 0:
-            angle = angle + 120
+            angle = angle + PI * 2 / 3
             if vector[1] < 0:
-                angle = angle + 120
-        self.add_arc(1, center, angle, angle + 120)
+                angle = angle + PI * 2 / 3
+        self.add_arc(center, 1, angle, PI * 2 / 3)
 
     def draw_round_triangle(self, first, second, third):
         self.reference_used[first] = True
@@ -196,12 +219,10 @@ class HexagonalGenerator(Generator):
         v5 = scale_vector(normalize_vector(v3), 2 - math.sqrt(3))
         v6 = normalize_vector(sub_vector(v3, v2))
         center = add_vector(first, add_vector(v4, v5))
-        radians = vector_angle(v3)
-        degrees = math.degrees(radians) + 90
+        radians = vector_angle(v3) + PI / 2
         if order > 0:
-            degrees = degrees + 150
-        end = degrees + 30
-        self.add_arc(1, center, degrees, end)
+            radians += PI * 5 / 6
+        self.add_arc(center, 1, radians, PI / 6)
         target = normalize_vector(sub_vector(second, first))
         central = central_point((first, second))
         shifted = add_vector(first, scale_vector(target, margins))
@@ -235,7 +256,7 @@ class HexagonalGenerator(Generator):
         self.draw_round_corner(first, second, third, order)
         self.draw_round_corner(second, first, third, order * -1)
 
-    def make_holes(self):
+    def draw_holes(self):
         bottom = self.bottom_row - 1
         top = self.top_row + 2
         left = self.left_column - 1
@@ -245,36 +266,36 @@ class HexagonalGenerator(Generator):
         nodes = []
         for row in row_range:
             for column in column_range:
-                nodes.append((column, row))
+                nodes.append(Node(column, row))
         triangles = []
         for left in nodes:
-            right = (left[0] + 1, left[1])
-            if left[1] % 2:
-                up = (left[0] + 1, left[1] + 1)
-                down = (left[0] + 1, left[1] - 1)
+            right = Node(left.column + 1, left.row)
+            if left.row % 2:
+                up = Node(left.column + 1, left.row + 1)
+                down = Node(left.column + 1, left.row - 1)
             else:
-                up = (left[0], left[1] + 1)
-                down = (left[0], left[1] - 1)
+                up = Node(left.column, left.row + 1)
+                down = Node(left.column, left.row - 1)
             triangles.append(Triangle(self, left, right, up, 1))
             triangles.append(Triangle(self, left, right, down, -1))
 
         for t in triangles:
-            self.add_reference_point(t.first, t.realfirst)
-            self.add_reference_point(t.second, t.realsecond)
-            self.add_reference_point(t.third, t.realthird)
+            self.add_reference_point(t.nodefirst, t.realfirst)
+            self.add_reference_point(t.nodesecond, t.realsecond)
+            self.add_reference_point(t.nodethird, t.realthird)
 
         for t in triangles:
-            if self.all_valid((t.first, t.second, t.third)):
+            if t.nodefirst in self.group and t.nodesecond in self.group and t.nodethird in self.group:
                 self.draw_round_triangle(t.realfirst, t.realsecond, t.realthird)
-            elif t.first in self.group and t.second in self.group:
+            elif t.nodefirst in self.group and t.nodesecond in self.group:
                 self.draw_round_line(t.realfirst, t.realsecond, t.realthird, t.orientation)
-            elif t.first in self.group and t.third in self.group:
+            elif t.nodefirst in self.group and t.nodethird in self.group:
                 self.draw_round_line(t.realfirst, t.realthird, t.realsecond, -t.orientation)
-            elif t.third in self.group and t.second in self.group:
+            elif t.nodethird in self.group and t.nodesecond in self.group:
                 self.draw_round_line(t.realthird, t.realsecond, t.realfirst, -t.orientation)
 
-    def draw_blind(self, vertex, node):
-        center = self.real_coord(node)
+    def draw_corner(self, vertex, node):
+        center = node.position(self)
         points = list(map(lambda r: r, self.reference_points[node]))
         distmap = {}
         for p in points:
@@ -287,44 +308,26 @@ class HexagonalGenerator(Generator):
         points = list(filter(lambda p: abs(distmap[p] - shortest) < 0.001, points))
         assert(len(points) == 2)
         first, second = points
-        shift = 1 / math.sqrt(3)
-        firstmiddle = central_point((vertex, first))
-        firstvector = normalize_vector(sub_vector(first, vertex))
-        firstshift = add_vector(vertex, scale_vector(firstvector, shift))
-        secondmiddle = central_point((vertex, second))
-        secondvector = normalize_vector(sub_vector(second, vertex))
-        secondshift = add_vector(vertex, scale_vector(secondvector, shift))
-        self.add_line(firstshift, firstmiddle)
-        self.add_line(secondshift, secondmiddle)
         vector = normalize_vector(sub_vector(center, vertex))
         shift = math.tan(math.radians(30)) * 2
         central = add_vector(vertex, scale_vector(vector, shift))
-        firstangle = vector_angle(firstvector)
-        secondangle = vector_angle(secondvector)
-        anglediff = secondangle - firstangle
-        start = math.degrees(firstangle) + 90
-        if anglediff > 0:
-            start += 120
-        if firstvector[1] < 0 and secondvector[0] > 0 and secondvector[1] > 0:
-            start += 120
-        if abs(secondvector[0]) < 0.001 and secondvector[1] > 0 and firstvector[0] > 0 and firstvector[1] < 0:
-            start += 120
-        end = start + 60
-        self.add_arc(1, central, start, end)
+        start = vector_angle(sub_vector(central, center)) - PI / 6
+        radius = self.connection_width / 2 * math.sqrt(3)
+        self.add_arc(center, radius, start, PI / 3)
 
-    def make_blinds(self):
+    def draw_corners(self):
         for node in filter(lambda n: n in self.group, self.reference_points):
             for ref in self.reference_points[node]:
                 vertex = ref
                 if not self.reference_used[vertex]:
-                    self.draw_blind(vertex, node)
+                    self.draw_corner(vertex, node)
 
 groups=[
-        {(0, 0), (1, 0), (0, 1), (1, 1), (0, 2), (1, 2), (1, 3)},
+        {(0, 0), (1, 0), (0, 1), (1, 1), (0, 2), (1, 2), (1, 3), (0, -1), (2, 1), (-1, 2), (2, 2)},
 ]
 
-generator = HexagonalGenerator('nikle.dxf', 19.5, 6)
-generator.make_graph(groups[0])
-generator.make_holes()
-generator.make_blinds()
-generator.save()
+generator = HexagonalGenerator(19.5, 6)
+generator.load_group(groups[0])
+generator.draw_holes()
+generator.draw_corners()
+generator.draw_dxf('nikle.dxf')
