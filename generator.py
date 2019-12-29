@@ -1,3 +1,7 @@
+##
+ # 2019 Mieszko Mazurek <mimaz@gmx.com>
+ ##
+
 from dxfwrite import DXFEngine as dxf
 import math
 
@@ -250,8 +254,8 @@ class HexagonalGenerator(Generator):
         self.triangle_radius = radius
 
     def node_coords(self, column, row):
-        x = (column + row % 2 * 0.5) * generator.scale_x
-        y = row * generator.scale_y
+        x = (column + row % 2 * 0.5) * self.scale_x
+        y = row * self.scale_y
         return Vector(x, y)
 
     def draw_round_triangle(self, first, second, third):
@@ -304,6 +308,10 @@ class HexagonalGenerator(Generator):
     def draw_round_line(self, first, second, third, order):
         self.draw_round_corner(first, second, third, order)
         self.draw_round_corner(second, first, third, order * -1)
+
+    def draw_group(self):
+        self.draw_holes()
+        self.draw_corners()
 
     def draw_holes(self):
         bottom = self.bottom_row - 1

@@ -1,8 +1,12 @@
 #!/usr/bin/python
 
-from . import Generator
+##
+ # 2019 Mieszko Mazurek <mimaz@gmx.com>
+ ##
 
-groups=[
+import generator as gen
+
+battery=[
         [(0, 1), (0, 2), (0, 3), (1, 0), (2, 0)],
         [(1, 1), (1, 2), (1, 3), (2, 4), (3, 4)],
         [(2, 1), (2, 2), (2, 3), (3, 0), (3, 2)],
@@ -24,11 +28,10 @@ width = 6
 radius = 1
 filename = 'nikle.dxf'
 
-generator = HexagonalGenerator(distance, width, radius)
+generator = gen.HexagonalGenerator(distance, width, radius)
 
-for group in Group.generate_list(groups):
+for group in gen.Group.generate_list(battery):
     generator.load_group(group)
-    generator.draw_holes()
-    generator.draw_corners()
+    generator.draw_group()
 
 generator.draw_dxf(filename)

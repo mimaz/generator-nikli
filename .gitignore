@@ -1,2 +1,3 @@
 #nikle.dxf nikle.dxf test.dxf
 *.dxf
+__pycache__/
