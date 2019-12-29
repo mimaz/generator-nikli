@@ -1,5 +1,3 @@
-#!/usr/bin/python
-
 from dxfwrite import DXFEngine as dxf
 import math
 
@@ -128,6 +126,22 @@ class Group:
         self.array = array
         self.layer = layer
 
+    def generate_list(batgroups):
+        grouplist = []
+        prevgroup = []
+        layer = 0
+        for group in batgroups:
+            merged = {*group, *prevgroup}
+            grouplist.append(Group(merged, layer))
+            if layer > 0:
+                layer = 0
+            else:
+                layer = 1
+            prevgroup = group
+        grouplist.append(Group(prevgroup, layer))
+        return grouplist
+
+
 class Generator:
     def __init__(self, scalex, scaley):
         self.connection_width = 5
@@ -142,12 +156,14 @@ class Generator:
         for shape in self.shapes:
             dxfshape = None
             if shape.layer == 0:
-                layer_offset = Vector.zero()
+                offset_y = 0
             elif shape.layer == 1:
                 box = self.layer_boxes[0]
-                layer_offset = Vector(0,  box.size.y / 2)
+                offset_y = box.y + box.size.y / 2
             else:
                 print("unsupported layer")
+
+            layer_offset = Vector(0, offset_y)
 
             if isinstance(shape, Line):
                 start = shape.start.add(layer_offset).coords()
@@ -351,30 +367,3 @@ class HexagonalGenerator(Generator):
                 vertex = ref
                 if not self.reference_used[vertex]:
                     self.draw_corner(vertex, node)
-
-def generate_groups(batgroups):
-    grouplist = []
-    prevgroup = []
-    layer = 0
-    for group in batgroups:
-        merged = {*group, *prevgroup}
-        grouplist.append(Group(merged, layer))
-        if layer > 0:
-            layer = 0
-        else:
-            layer = 1
-        prevgroup = group
-    grouplist.append(Group(prevgroup, layer))
-    return grouplist
-
-groups=[
-        [(0, 0), (1, 0), (2, 0), (0, 1)],
-        [(1, 1), (2, 1), (3, 1), (4, 1)],
-]
-
-generator = HexagonalGenerator(19.5, 6, 1.5)
-for group in generate_groups(groups):
-    generator.load_group(group)
-    generator.draw_holes()
-    generator.draw_corners()
-generator.draw_dxf('nikle.dxf')
