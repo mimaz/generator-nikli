@@ -3,7 +3,7 @@
 from dxfwrite import DXFEngine as dxf
 import math
 
-PI = 3.14159
+PI = math.acos(0) * 2
 
 def vector_length(vec):
     return math.sqrt(vec[0] * vec[0] + vec[1] * vec[1])
@@ -157,100 +157,61 @@ class Triangle:
         self.realthird = hole_vertex(realthird, central)
 
 class HexagonalGenerator(Generator):
-    def __init__(self, scale, width):
+    def __init__(self, scale, width, radius):
         vscale = scale * math.sqrt(3) / 2
         super(HexagonalGenerator, self).__init__(scale, vscale, 0.5)
-
-    def all_vertex_edges(self, column, row):
-        edges = []
-        edges.append((column + 1, row))
-        edges.append((column - 1, row))
-        edges.append((column, row + 1))
-        edges.append((column, row - 1))
-        if row % 2:
-            edges.append((column + 1, row + 1))
-            edges.append((column + 1, row - 1))
-        else:
-            edges.append((column - 1, row + 1))
-            edges.append((column - 1, row - 1))
-        return edges
-
-    def add_line_with_margins(self, start, end, margins):
-        vector = (end[0] - start[0], end[1] - start[1])
-        vector = normalize_vector(vector)
-        vector = scale_vector(vector, margins)
-        start = add_vector(start, vector)
-        end = sub_vector(end, vector)
-        self.add_line(start, end)
-
-    def draw_triangle_corner(self, vertex, left, right):
-        middle = central_point((left, right))
-        vector = sub_vector(middle, vertex)
-        vector = normalize_vector(vector)
-        vector = scale_vector(vector, 2)
-        center = add_vector(vertex, vector)
-        angle = math.asin(vector[1] / vector_length(vector))
-        angle = angle + PI * 2 / 3
-        if vector[0] < 0:
-            angle = angle + PI * 2 / 3
-            if vector[1] < 0:
-                angle = angle + PI * 2 / 3
-        self.add_arc(center, 1, angle, PI * 2 / 3)
+        self.triangle_radius = radius
 
     def draw_round_triangle(self, first, second, third):
+        margins = math.sqrt(3) * self.triangle_radius
+
+        def corner(vertex, left, right):
+            middle = central_point((left, right))
+            vector = sub_vector(middle, vertex)
+            vector = normalize_vector(vector)
+            vector = scale_vector(vector, 2 * self.triangle_radius)
+            center = add_vector(vertex, vector)
+            angle = vector_angle(vector) + PI * 2 / 3
+            self.add_arc(center, self.triangle_radius, angle, PI * 2 / 3)
+
+        def line(start, end):
+            vector = (end[0] - start[0], end[1] - start[1])
+            vector = normalize_vector(vector)
+            vector = scale_vector(vector, margins)
+            start = add_vector(start, vector)
+            end = sub_vector(end, vector)
+            self.add_line(start, end)
+
         self.reference_used[first] = True
         self.reference_used[second] = True
         self.reference_used[third] = True
-        self.draw_triangle_corner(first, second, third)
-        self.draw_triangle_corner(third, first, second)
-        self.draw_triangle_corner(second, third, first)
-        self.add_line_with_margins(first, second, math.sqrt(3))
-        self.add_line_with_margins(second, third, math.sqrt(3))
-        self.add_line_with_margins(third, first, math.sqrt(3))
+        corner(first, second, third)
+        corner(third, first, second)
+        corner(second, third, first)
+        line(first, second)
+        line(second, third)
+        line(third, first)
 
     def draw_round_corner(self, first, second, third, order):
         self.reference_used[first] = True
         self.reference_used[second] = True
-        margins = 2 - math.sqrt(3)
-        v1 = sub_vector(third, first)
-        v2 = scale_vector(v1, 2)
-        v3 = sub_vector(second, first)
-        v4 = normalize_vector(sub_vector(v2, v3))
-        v5 = scale_vector(normalize_vector(v3), 2 - math.sqrt(3))
-        v6 = normalize_vector(sub_vector(v3, v2))
-        center = add_vector(first, add_vector(v4, v5))
-        radians = vector_angle(v3) + PI / 2
+        third2vector = scale_vector(sub_vector(third, first), 2)
+        secondvector = sub_vector(second, first)
+        middlevector = normalize_vector(sub_vector(third2vector, secondvector))
+        sidevector = scale_vector(normalize_vector(secondvector), 2 - math.sqrt(3))
+        center = add_vector(first, add_vector(middlevector, sidevector))
+        vector = normalize_vector(sub_vector(center, first))
+        radius = self.connection_width * (1 + math.sqrt(3) / 2)
+        center = add_vector(first, scale_vector(vector, radius / math.sin(math.radians(75))))
+        angle = vector_angle(secondvector) + PI / 2
         if order > 0:
-            radians += PI * 5 / 6
-        self.add_arc(center, 1, radians, PI / 6)
+            angle += PI * 5 / 6
+        self.add_arc(center, radius, angle, PI / 6)
         target = normalize_vector(sub_vector(second, first))
         central = central_point((first, second))
+        margins = self.connection_width / 2
         shifted = add_vector(first, scale_vector(target, margins))
         self.add_line(shifted, central)
-        node = self.reference_nodes[first]
-        assert(node in self.group)
-        points = self.reference_points[node]
-        firstdistmap = {}
-        seconddistmap = {}
-        for p in points:
-            firstdistmap[p] = vector_length(sub_vector(p, first))
-            seconddistmap[p] = vector_length(sub_vector(p, second))
-        def distance_first(p):
-            return firstdistmap[p]
-        def distance_second(p):
-            return seconddistmap[p]
-        points = sorted(points, key=distance_first)
-        points = list(filter(lambda p: firstdistmap[p] != 0, points))
-        shortest = firstdistmap[points[0]]
-        points = list(filter(lambda p: abs(firstdistmap[p] - shortest) < 0.001, points))
-        points = list(sorted(points, key = distance_second, reverse = True))
-        point = points[0]
-        center = central_point((point, first))
-        vector = sub_vector(point, first)
-        vector = normalize_vector(vector)
-        vector = scale_vector(vector, math.tan(math.radians(15)) * 1)
-        start = add_vector(first, vector)
-        self.add_line(start, center)
 
     def draw_round_line(self, first, second, third, order):
         self.draw_round_corner(first, second, third, order)
@@ -323,10 +284,10 @@ class HexagonalGenerator(Generator):
                     self.draw_corner(vertex, node)
 
 groups=[
-        {(0, 0), (1, 0), (0, 1), (1, 1), (0, 2), (1, 2), (1, 3), (0, -1), (2, 1), (-1, 2), (2, 2)},
+        {(0, 0), (1, 0), (0, 1), (1, 1), (0, 2), (1, 2), (1, 3), (0, -1), (2, 1), (-1, 2), (2, 2), (2, 0)},
 ]
 
-generator = HexagonalGenerator(19.5, 6)
+generator = HexagonalGenerator(19.5, 6, 1.5)
 generator.load_group(groups[0])
 generator.draw_holes()
 generator.draw_corners()
