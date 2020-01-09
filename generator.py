@@ -312,6 +312,7 @@ class HexagonalGenerator(Generator):
     def draw_group(self):
         self.draw_holes()
         self.draw_corners()
+        self.draw_dilatation()
 
     def draw_holes(self):
         bottom = self.bottom_row - 1
@@ -375,3 +376,10 @@ class HexagonalGenerator(Generator):
                 vertex = ref
                 if not self.reference_used[vertex]:
                     self.draw_corner(vertex, node)
+
+    def draw_dilatation(self):
+        for node in self.group:
+            shift = Vector(1.5, 0)
+            left = node.sub(shift)
+            right = node.add(shift)
+            self.add_line(left, right)
