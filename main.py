@@ -6,7 +6,7 @@
 
 import generator as gen
 
-battery=[
+reention_70_14s=[
         [(0, 1), (0, 2), (0, 3), (1, 0), (2, 0)],
         [(1, 1), (1, 2), (1, 3), (2, 4), (3, 4)],
         [(2, 1), (2, 2), (2, 3), (3, 0), (3, 2)],
@@ -23,15 +23,34 @@ battery=[
         [(14, 1), (15, 2), (14, 3), (13, 3), (13, 4)],
 ]
 
+reention_56_14s=[
+        [(0, 1), (0, 2), (0, 3), (1, 2)],
+        [(1, 1), (2, 2), (1, 3), (2, 1)],
+        [(2, 3), (3, 2), (3, 1), (4, 0)],
+        [(3, 3), (4, 2), (4, 1), (5, 0)],
+        [(4, 3), (5, 2), (5, 1), (6, 0)],
+        [(5, 3), (6, 2), (6, 1), (7, 0)],
+        [(6, 3), (7, 2), (7, 1), (8, 0)],
+        [(7, 3), (8, 2), (8, 1), (9, 0)],
+        [(8, 3), (9, 2), (9, 1), (10, 0)],
+        [(9, 3), (10, 2), (10, 1), (11, 0)],
+        [(10, 3), (11, 2), (11, 1), (12, 0)],
+        [(11, 3), (12, 2), (12, 1), (13, 0)],
+        [(12, 3), (13, 2), (13, 1), (14, 0)],
+        [(14, 1), (14, 2), (13, 3), (15, 2)],
+]
+
 distance = 19.5
 width = 6
 radius = 1
-filename = 'nikle.dxf'
 
-generator = gen.HexagonalGenerator(distance, width, radius)
+def draw_battery(mapping, filename):
+    generator = gen.HexagonalGenerator(distance, width, radius)
+    for group in gen.Group.generate_list(reention_56_14s):
+        generator.load_group(group)
+        generator.draw_group()
+        generator.draw_dilatation(4, 0);
+    generator.draw_dxf(filename)
 
-for group in gen.Group.generate_list(battery):
-    generator.load_group(group)
-    generator.draw_group()
-
-generator.draw_dxf(filename)
+draw_battery(reention_70_14s, 'reention_70_14s.dxf')
+draw_battery(reention_56_14s, 'reention_56_14s.dxf')
