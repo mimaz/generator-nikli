@@ -151,10 +151,11 @@ class Generator:
         self.scale_x = scalex
         self.scale_y = scaley
         self.shapes = []
-        self.layer_boxes = {}
         self.layer_count = 0
-        self.compress_distance = 0
+        self.horizontal_compress = 0
+        self.vertical_compress = 0
         self.secondary_offset = 0
+        self.mirror_shift = 0
 
     def draw_dxf(self, name):
         drawing = dxf.drawing(name)
@@ -162,13 +163,9 @@ class Generator:
             dxfshape = None
             layrow = shape.layer % 2
             laycolumn = shape.layer / 2
-            if layrow == 0:
-                offset_y = 0
-            else:
-                box = self.layer_boxes[0]
-                offset_y = box.y + box.size.y / 2 - self.compress_distance
-
-            offset_x = -self.compress_distance * laycolumn
+            offset_x = -self.horizontal_compress * laycolumn
+            offset_x += self.horizontal_compress / self.connection_width / 2 * layrow
+            offset_y = (self.mirror_shift - self.vertical_compress) * layrow
             layer_offset = Vector(offset_x, offset_y)
 
             if isinstance(shape, Line):
@@ -186,22 +183,12 @@ class Generator:
                 drawing.add(dxfshape)
         drawing.save()
 
-    def add_layer_box(self, rect):
-        layrow = self.layer % 2
-        if layrow in self.layer_boxes:
-            prev = self.layer_boxes[layrow]
-        else:
-            prev = Rect.zero()
-        self.layer_boxes[layrow] = prev.merge(rect)
-
     def add_line(self, start, end):
         box = Rect(Vector.center((start, end)), end.sub(start))
-        self.add_layer_box(box)
         self.shapes.append(Line(self.layer, start, end))
 
     def add_arc(self, center, radius, start, angle):
         box = Rect(center, Vector(radius * 2, radius * 2))
-        self.add_layer_box(box)
         self.shapes.append(Arc(self.layer, center, radius, start, angle))
 
     def add_reference_point(self, node, vertex):
@@ -254,7 +241,9 @@ class HexagonalGenerator(Generator):
         vscale = scale * math.sqrt(3) / 2
         super(HexagonalGenerator, self).__init__(scale, vscale)
         self.triangle_radius = radius
-        self.compress_distance = scale - width * math.sqrt(3) - 1
+        self.horizontal_compress = scale - width * math.sqrt(3) - 1
+        self.vertical_compress = scale - width * 2 - 1
+        self.mirror_shift = scale / 2 * math.sqrt(3) * 4
         self.connection_width = width
 
     def node_coords(self, column, row):
