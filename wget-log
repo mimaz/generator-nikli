@@ -1,0 +1,7 @@
+--2020-01-11 15:53:35--  https://osdn.net/frs/redir.php?m=dotsrc
+Załadowano certyfikat CA '/etc/ssl/certs/ca-certificates.crt'
+Translacja osdn.net (osdn.net)... 202.221.179.17
+Łączenie się z osdn.net (osdn.net)|202.221.179.17|:443... połączono.
+Żądanie HTTP wysłano, oczekiwanie na odpowiedź... 404 Not Found
+2020-01-11 15:53:37 BŁĄD 404: Not Found.
+

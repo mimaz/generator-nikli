@@ -57,12 +57,12 @@ class Vector:
         x = sum(map(lambda v: v.x, veclist))
         y = sum(map(lambda v: v.y, veclist))
         count = len(veclist)
-        return Vector(x / count, y / count)
+        return Vector(float(x) / count, float(y) / count)
 
-    def lower(self, other):
+    def min(self, other):
         return Vector(min(self.x, other.x), min(self.y, other.y))
 
-    def upper(self, other):
+    def max(self, other):
         return Vector(max(self.x, other.x), max(self.y, other.y))
 
 class Rect(Vector):
@@ -74,8 +74,8 @@ class Rect(Vector):
         return Rect(Vector.zero(), Vector.zero())
 
     def merge(self, other):
-        lower = self.lower().lower(other.lower())
-        upper = self.upper().upper(other.upper())
+        lower = self.lower().min(other.lower())
+        upper = self.upper().max(other.upper())
         center = Vector.center((lower, upper))
         size = upper.sub(lower)
         return Rect(center, size)
@@ -137,37 +137,39 @@ class Group:
         for group in batgroups:
             merged = {*group, *prevgroup}
             grouplist.append(Group(merged, layer))
-            if layer > 0:
-                layer = 0
-            else:
-                layer = 1
+            layer = layer + 1
+            #if layer > 0:
+                #layer = 0
+            #else:
+                #layer = 1
             prevgroup = group
         grouplist.append(Group(prevgroup, layer))
         return grouplist
 
-
 class Generator:
     def __init__(self, scalex, scaley):
-        self.connection_width = 5
         self.scale_x = scalex
         self.scale_y = scaley
         self.shapes = []
         self.layer_boxes = {}
         self.layer_count = 0
+        self.compress_distance = 0
+        self.secondary_offset = 0
 
     def draw_dxf(self, name):
         drawing = dxf.drawing(name)
         for shape in self.shapes:
             dxfshape = None
-            if shape.layer == 0:
+            layrow = shape.layer % 2
+            laycolumn = shape.layer / 2
+            if layrow == 0:
                 offset_y = 0
-            elif shape.layer == 1:
-                box = self.layer_boxes[0]
-                offset_y = box.y + box.size.y / 2
             else:
-                print("unsupported layer")
+                box = self.layer_boxes[0]
+                offset_y = box.y + box.size.y / 2 - self.compress_distance
 
-            layer_offset = Vector(0, offset_y)
+            offset_x = -self.compress_distance * laycolumn
+            layer_offset = Vector(offset_x, offset_y)
 
             if isinstance(shape, Line):
                 start = shape.start.add(layer_offset).coords()
@@ -185,11 +187,12 @@ class Generator:
         drawing.save()
 
     def add_layer_box(self, rect):
-        if self.layer in self.layer_boxes:
-            prev = self.layer_boxes[self.layer]
+        layrow = self.layer % 2
+        if layrow in self.layer_boxes:
+            prev = self.layer_boxes[layrow]
         else:
             prev = Rect.zero()
-        self.layer_boxes[self.layer] = prev.merge(rect)
+        self.layer_boxes[layrow] = prev.merge(rect)
 
     def add_line(self, start, end):
         box = Rect(Vector.center((start, end)), end.sub(start))
@@ -238,7 +241,6 @@ class Triangle:
             return central.sub(point).normalized().scaled(width).add(point)
 
         central = Vector.center((first, second, third))
-
         self.orientation = orientation
         self.nodefirst = first
         self.nodesecond = second
@@ -252,6 +254,8 @@ class HexagonalGenerator(Generator):
         vscale = scale * math.sqrt(3) / 2
         super(HexagonalGenerator, self).__init__(scale, vscale)
         self.triangle_radius = radius
+        self.compress_distance = scale - width * math.sqrt(3) - 1
+        self.connection_width = width
 
     def node_coords(self, column, row):
         x = (column + row % 2 * 0.5) * self.scale_x
@@ -342,7 +346,7 @@ class HexagonalGenerator(Generator):
             self.add_reference_point(t.nodethird, t.third)
 
         for t in triangles:
-            if t.nodefirst in self.group and t.nodesecond in self.group and t.nodethird in self.group:
+            if all(map(lambda n: n in self.group, (t.nodefirst, t.nodesecond, t.nodethird))):
                 self.draw_round_triangle(t.first, t.second, t.third)
             elif t.nodefirst in self.group and t.nodesecond in self.group:
                 self.draw_round_line(t.first, t.second, t.third, t.orientation)

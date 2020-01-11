@@ -40,17 +40,35 @@ reention_56_14s=[
         [(14, 1), (14, 2), (13, 3), (15, 2)],
 ]
 
-distance = 19.5
-width = 6
+test_14s1p=[
+        [(0, 0)],
+        [(1, 0)],
+        [(2, 0)],
+        [(3, 0)],
+        [(4, 0)],
+        [(5, 0)],
+        [(6, 0)],
+        [(7, 0)],
+        [(8, 0)],
+        [(9, 0)],
+        [(10, 0)],
+        [(11, 0)],
+        [(12, 0)],
+        [(13, 0)],
+]
+
+distance = 18
+width = 5
 radius = 1
 
 def draw_battery(mapping, filename):
     generator = gen.HexagonalGenerator(distance, width, radius)
-    for group in gen.Group.generate_list(reention_56_14s):
+    for group in gen.Group.generate_list(mapping):
         generator.load_group(group)
         generator.draw_group()
-        generator.draw_dilatation(4, 0);
+        generator.draw_dilatation(4, 0)
     generator.draw_dxf(filename)
 
 draw_battery(reention_70_14s, 'reention_70_14s.dxf')
 draw_battery(reention_56_14s, 'reention_56_14s.dxf')
+draw_battery(test_14s1p, 'test_14s1p.dxf')
