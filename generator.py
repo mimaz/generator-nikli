@@ -155,7 +155,7 @@ class Generator:
         self.horizontal_compress = 0
         self.vertical_compress = 0
         self.secondary_offset = 0
-        self.mirror_shift = 0
+        self.layer_heights = {}
 
     def draw_dxf(self, name):
         drawing = dxf.drawing(name)
@@ -164,7 +164,6 @@ class Generator:
             layrow = shape.layer % 2
             laycolumn = shape.layer / 2
             offset_x = -self.horizontal_compress * laycolumn
-            offset_x += self.horizontal_compress / self.connection_width / 2 * layrow
             offset_y = (self.mirror_shift - self.vertical_compress) * layrow
             layer_offset = Vector(offset_x, offset_y)
 
@@ -237,14 +236,14 @@ class Triangle:
         self.third = hole_vertex(third, central)
 
 class HexagonalGenerator(Generator):
-    def __init__(self, scale, width, radius):
+    def __init__(self, scale, width, radius, rowcount, margin):
         vscale = scale * math.sqrt(3) / 2
         super(HexagonalGenerator, self).__init__(scale, vscale)
         self.triangle_radius = radius
-        self.horizontal_compress = scale - width * math.sqrt(3) - 1
-        self.vertical_compress = scale - width * 2 - 1
-        self.mirror_shift = scale / 2 * math.sqrt(3) * 4
+        self.horizontal_compress = scale - width * math.sqrt(3) - margin
+        self.vertical_compress = scale - width * 2 - margin * 2
         self.connection_width = width
+        self.mirror_shift = self.scale_x / 2 * math.sqrt(3) * rowcount
 
     def node_coords(self, column, row):
         x = (column + row % 2 * 0.5) * self.scale_x

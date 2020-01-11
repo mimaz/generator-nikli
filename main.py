@@ -60,9 +60,20 @@ test_14s1p=[
 distance = 18
 width = 5
 radius = 1
+margin = 1
+
+def count_rows(mapping):
+    low = 0
+    up = 0
+    for group in mapping:
+        for pair in group:
+            low = min(low, pair[1])
+            up = max(up, pair[1])
+    return up - low + 1
 
 def draw_battery(mapping, filename):
-    generator = gen.HexagonalGenerator(distance, width, radius)
+    rows = count_rows(mapping)
+    generator = gen.HexagonalGenerator(distance, width, radius, rows, margin)
     for group in gen.Group.generate_list(mapping):
         generator.load_group(group)
         generator.draw_group()
