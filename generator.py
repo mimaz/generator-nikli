@@ -100,12 +100,12 @@ class Node(Vector):
         return "Node({}, {})".format(self.column, self.row)
 
 class Shape:
-    def __init__(self, layer):
-        self.layer = layer
+    def __init__(self, index):
+        self.index = index
 
 class Line(Shape):
-    def __init__(self, layer, start, end):
-        super(Line, self).__init__(layer)
+    def __init__(self, index, start, end):
+        super(Line, self).__init__(index)
         self.start = start
         self.end = end
 
@@ -113,8 +113,8 @@ class Line(Shape):
         return "Line({} -> {})".format(self.start, self.end)
 
 class Arc(Shape):
-    def __init__(self, layer, center, radius, start, angle):
-        super(Arc, self).__init__(layer)
+    def __init__(self, index, center, radius, start, angle):
+        super(Arc, self).__init__(index)
         self.center = center
         self.radius = radius
         self.start = start
@@ -126,24 +126,20 @@ class Arc(Shape):
         return "Arc({} [{}] {}PI/{}PI)".format(self.center, self.radius, start, angle)
 
 class Group:
-    def __init__(self, array, layer):
+    def __init__(self, array, index):
         self.array = array
-        self.layer = layer
+        self.index = index
 
     def generate_list(batgroups):
         grouplist = []
         prevgroup = []
-        layer = 0
+        index = 0
         for group in batgroups:
             merged = {*group, *prevgroup}
-            grouplist.append(Group(merged, layer))
-            layer = layer + 1
-            #if layer > 0:
-                #layer = 0
-            #else:
-                #layer = 1
+            grouplist.append(Group(merged, index))
+            index += 1
             prevgroup = group
-        grouplist.append(Group(prevgroup, layer))
+        grouplist.append(Group(prevgroup, index))
         return grouplist
 
 class Generator:
@@ -151,29 +147,29 @@ class Generator:
         self.scale_x = scalex
         self.scale_y = scaley
         self.shapes = []
-        self.layer_count = 0
+        self.index_count = 0
         self.horizontal_compress = 0
         self.vertical_compress = 0
         self.secondary_offset = 0
-        self.layer_heights = {}
+        self.index_heights = {}
 
     def draw_dxf(self, name):
         drawing = dxf.drawing(name)
         for shape in self.shapes:
             dxfshape = None
-            layrow = shape.layer % 2
-            laycolumn = shape.layer / 2
+            layrow = shape.index % 2
+            laycolumn = shape.index / 2
             offset_x = -self.horizontal_compress * laycolumn
             offset_y = (self.mirror_shift - self.vertical_compress) * layrow
-            layer_offset = Vector(offset_x, offset_y)
+            offset_vector = Vector(offset_x, offset_y)
 
             if isinstance(shape, Line):
-                start = shape.start.add(layer_offset).coords()
-                end = shape.end.add(layer_offset).coords()
+                start = shape.start.add(offset_vector).coords()
+                end = shape.end.add(offset_vector).coords()
                 dxfshape = dxf.line(start, end)
 
             if isinstance(shape, Arc):
-                center = shape.center.add(layer_offset).coords()
+                center = shape.center.add(offset_vector).coords()
                 start = math.degrees(shape.start)
                 end = math.degrees(shape.start + shape.angle)
                 dxfshape = dxf.arc(shape.radius, center, start, end)
@@ -184,11 +180,11 @@ class Generator:
 
     def add_line(self, start, end):
         box = Rect(Vector.center((start, end)), end.sub(start))
-        self.shapes.append(Line(self.layer, start, end))
+        self.shapes.append(Line(self.index, start, end))
 
     def add_arc(self, center, radius, start, angle):
         box = Rect(center, Vector(radius * 2, radius * 2))
-        self.shapes.append(Arc(self.layer, center, radius, start, angle))
+        self.shapes.append(Arc(self.index, center, radius, start, angle))
 
     def add_reference_point(self, node, vertex):
         reference = vertex
@@ -211,7 +207,7 @@ class Generator:
             bottom_row = min(bottom_row, node.row)
             top_row = max(top_row, node.row)
         self.group = set(nodes)
-        self.layer = group.layer
+        self.index = group.index
         self.reference_points = {}
         self.reference_used = {}
         self.reference_nodes = {}
